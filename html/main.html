@@ -1,0 +1,573 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="maximum-scale=1.0,minimum-scale=1.0,user-scalable=0,width=device-width,initial-scale=1.0"/>
+    <meta name="format-detection" content="telephone=no,email=no,date=no,address=no">
+    <title>Hello APP</title>
+    <link rel="stylesheet" type="text/css" href="../css/api.css" />
+    <script src="../script/jquery.min.js"></script>
+    <script src="../script/rem.js"></script>
+    <style>
+
+    </style>
+</head>
+<body>
+
+</body>
+<script type="text/javascript" src="../script/api.js"></script>
+<script src="../script/socket.io.js"></script>
+<script type="text/javascript">
+    var aa=0;
+    var h1;
+    var uid;
+    var select_idx;
+    var socket;
+    apiready = function() {
+        api.closeFrame({
+            name: 'login'
+        });
+        var hh = api.winHeight;
+        h1 = hh - 65;
+        nvtabbar();
+        uid = api.getPrefs({sync: true, key: 'uid'});
+        api.addEventListener({
+            name: 'keyback'
+        }, function (ret, err) {
+            if (aa == 0) {
+                api.toast({
+                    msg: '再按一次退出',
+                    duration: 2000,
+                    location: 'center'
+                });
+                aa = 3;
+            } else if (aa > 0 && aa <= 3) {
+                api.closeWidget({
+                    id: 'A6941282178145',
+                    retData: {
+                        type: "none",
+                        name: 'closeWidget'
+                    },
+                    silent: true
+                });
+            }
+            var djs = setInterval(function () {
+                --aa;
+                if (aa == 0) {
+                    clearInterval(djs);
+                }
+            }, 1000);
+        });
+
+//通知栏点击事件
+        api.addEventListener({
+            name: 'noticeclicked'
+        }, function (ret, err) {
+            var obj = eval('(' + ret.value + ')');
+            if(obj.key == 'ql'){
+                api.openWin({
+                    name: 'groupChartNumber_qty',
+                    url: 'widget://html/message/groupChartNumber_qty.html',
+                    bounces: false,
+                    pageParam: {gid:obj.gid },
+                    allowEdit:true,
+                    rect: {x: 0, y: 0, w: 'auto', h: 'auto'}
+                });
+            }else if (obj.key == 'dl'){
+                api.openWin({
+                    name: 'talk_about',
+                    url: 'widget://html/message/talk_about.html',
+                    bounces: false,
+                    pageParam: {friend_id: obj.toid},
+                    allowEdit:true,
+                    rect: {x: 0, y: 0, w: 'auto', h: 'auto'}
+                });
+            }else{
+                api.openWin({
+                    name: 'man_information_zn',
+                    url: 'widget://html/me/man_information_zn.html',
+                    bounces: false,
+                    rect: {x: 0, y: 0, w: 'auto', h: 'auto'}
+                });
+            }
+        });
+
+        api.addEventListener({
+            name: 'keyback'
+        }, function (ret, err) {
+            api.toLauncher();
+        });
+
+
+        //打通服务端与客户端双向通讯
+        socket = io('http://60.205.153.37:4003');
+        socket.on('connect', function () {
+            socket.emit('login', uid);
+        });
+
+
+        //socke服务端定时更新是否有新的群组
+        socket.on("update_msg", function () {
+            api.ajax({
+                url: 'http://appapi.duyiwang.cn/index.php?action=user_groups&dir=groups&do=check_user_groups',
+                method: 'post',
+                data: {
+                    values: {uid: uid}
+                },
+                dataType: 'json'
+            }, function (ret, err) {
+                if (ret.code == 200) {
+                    if (ret.groups_gids) {
+                        socket.emit('join', uid, ret.groups_gids);
+                        /* for (var v in ret.groups_gids) {
+                         var groups_room = "groups_"+ret.groups_gids[v]['gu_gid'];
+                         if(groups_room=="groups_313"){
+                         }
+                         socket.emit('join', uid, groups_room);
+                         }*/
+                    }
+                }
+            });
+        });
+        socket.on('test_to_groups',function(msg){
+            var obj = eval('(' + msg + ')');
+        });
+
+        //群聊socke实时回调函数
+        socket.on('sixin_to_groups', function (msg) {
+            var obj = eval('(' + msg + ')');
+            api.ajax({
+                url: ' http://appapi.duyiwang.cn/index.php?action=user_groups&dir=groups&do=get_user_openwin',
+                method: 'post',
+                data: {
+                    values: {uid: uid}
+                },
+                dataType: 'json'
+            }, function (ret, err) {
+                if (ret.is_openwin == 0) {
+                    var notify_msg = "【群聊】";
+                    var notice_zn;
+                    if(obj.lx==0){
+                        notice_zn=obj.nr;
+                    }else if(obj.lx==1){
+                        notice_zn="发送了一张图片";
+                    }else{
+                        notice_zn="发送了一条语音";
+                    }
+                    api.notification({//手机通知栏通知消息
+                        notify: {
+                            content: notify_msg + obj.send_name + " : " + notice_zn,
+                            updateCurrent: true,
+                            extra: {key: 'ql', gid: obj.gid}
+                        }
+
+                    }, function (ret, err) {
+
+                    });
+                }
+            });
+            if(obj.sj==0) {
+                var jieshou = 'jieshou(\'' + msg + '\');';
+                api.execScript({
+                    name: 'groupChartNumber_qty',
+                    script: jieshou
+                });
+            }else {
+                var delete_zn = 'delete_zn(\'' + msg + '\')';
+                api.execScript({
+                    name: 'groupChartNumber_qty',
+                    script: delete_zn
+                });
+            }
+            if (select_idx == 1) {
+                api.execScript({
+                    name: 'main',
+                    frameName: 'info_qty',
+                    script: 'chat_list_yyt()'
+                });
+            }
+            set_badge(1);
+        });
+
+
+        socket.on('reply_to_msg',function(obj){
+            var obj=eval('('+obj+')');
+            var msg=obj.msg;
+            api.notification({//手机通知栏通知消息
+                vibrate: 100,
+                notify: {
+                    content: msg,
+                    updateCurrent: true,
+//                    extra: {key: 'dl', toid: obj.toid}
+                }
+            }, function (ret, err) {
+
+            });
+        })
+        //单聊socket实时回调函数
+        socket.on('sixin_to', function (msg) {
+            var obj = eval('(' + msg + ')');
+            api.ajax({
+                url: ' http://appapi.duyiwang.cn/index.php?action=user_groups&dir=groups&do=get_user_openwin',
+                method: 'post',
+                data: {
+                    values: {uid: uid}
+                },
+                dataType: 'json'
+            }, function (ret, err) {
+                if (ret.is_openwin == 0) {
+//                api.notification({//手机通知栏通知消息
+//                    notify: {
+//                        content:"您有一条新消息："+obj.nr,
+//                        updateCurrent: true,
+//                        extra:{key:'ql',gid:obj.gid}
+//                    }
+//
+//                }, function(ret, err) {
+//
+//
+//
+//
+//                });
+                    if (obj.lx = 0) {
+                        api.notification({//手机通知栏通知消息
+                            vibrate: 100,
+                            notify: {
+                                content: "您有一条新消息：" + obj.nr,
+                                updateCurrent: true,
+                                extra: {key: 'dl', toid: obj.toid}
+                            }
+                        }, function (ret, err) {
+                            var id = ret.id;
+                        });
+                    }
+
+
+                    if (obj.lx = 1) {
+                        api.notification({//手机通知栏通知消息
+                            vibrate: 100,
+                            notify: {
+                                content: "您有一条新消息:发了一张图片",
+                                updateCurrent: true,
+                                extra: {key: 'dl', toid: obj.toid}
+                            }
+
+                        }, function (ret, err) {
+                            var id = ret.id;
+                        });
+                    }
+                }
+            });
+
+
+            var jieshou = 'jieshou(\'' + msg + '\');';
+            api.execScript({
+                name: 'talk_about',
+                script: jieshou
+            });
+            if (select_idx == 1) {
+                api.execScript({
+                    name: 'main',
+                    frameName: 'info_qty',
+                    script: 'chat_list_yyt()'
+                });
+            }
+            set_badge(1);
+
+        });
+
+
+        //同意审核实时通讯事件
+        socket.on('verify_to_user', function (obj) {
+            var obj = eval('(' + obj + ')');
+            if (obj.store_id) {
+                api.execScript({
+                    name: 'main',
+                    frameName: 'me_',
+                    script: 'updata()'
+                })
+                api.execScript({
+                    name: 'man_information_zn',
+                    script: 'updata()'
+                })
+                api.execScript({
+                    name: 'personInfo_qty',
+                    script: 'updata_zn()'
+                })
+                api.removePrefs({
+                    key: 'store_id'
+                });
+                api.removePrefs({
+                    key: 'user_role'
+                });
+                api.setPrefs({
+                    key: 'roleid',
+                    value: obj.roleid
+                });
+                api.setPrefs({
+                    key: 'store_id',
+                    value: obj.store_id
+                });
+            }
+            api.setPrefs({
+                key: 'objMeg',
+                value: obj.msg
+            });
+            var jsfun = 'chongzai()';
+            api.execScript({
+                name: 'myaudita',
+                script: jsfun
+            });
+            api.execScript({
+                frameName: 'work_in',
+                script: 'store_id_cz()'
+            });
+            //    通知栏
+            api.notification({//手机通知栏通知消息
+//                vibrate: 100,
+                notify: {
+                    content: obj.msg,
+                    updateCurrent: true,
+                    extra:{key:'sh'}
+                }
+
+            }, function (ret, err) {
+//                var id = ret.id;
+            });
+
+
+
+
+            api.execScript({
+                name: 'auditEnter',
+                script: 'biaoji()'
+            });
+            api.execScript({
+                frameName: 'work_in',
+                script: 'biaoji()'
+            });
+        });
+
+    }
+
+    function nvtabbar(){
+        NVTabBar = api.require('NVTabBar');
+        NVTabBar.open({
+            styles: {
+                bg: '#fff',
+                h: 65,
+                badge:{bgColor:'#fff',numColor: '#999999', size: 6.0}
+            },
+            items: [{
+//                w: api.winWidth / 4.0,
+//                bg: {marginB: -5,image: 'rgba(0,0,0,0)'},
+//                iconRect: {w: 26.0,h: 26.0,},
+//                icon: {
+//                    normal: 'widget://image/img_yyt/data_.png',
+//                    highlight: 'widget://image/img_yyt/data_b.png',
+//                    selected: 'widget://image/img_yyt/data_b.png'
+//                },
+//                title: {text: '资料',size: 11.0,normal: '#9c9c9c',selected: '#1387ea',marginB: 9.0}
+
+
+
+                w: api.winWidth / 4.0,
+                bg: {marginB: -5,image: 'rgba(0,0,0,0)'},
+                iconRect: {w: 26.0,h: 26.0,},
+                icon: {
+                    normal: 'widget://image/img_yyt/work_.png',
+                    highlight: 'widget://image/img_yyt/work_b.png',
+                    selected: 'widget://image/img_yyt/work_b.png'
+                },
+                title: {text: '首页',size: 11.0,normal: '#9c9c9c',selected: '#1387ea',marginB: 9.0}
+            }, {
+                w: api.winWidth / 4.0,
+                bg: {marginB: -5,image: 'rgba(0,0,0,0)'},
+                iconRect: {w: 26.0,h: 26.0,},
+                icon: {
+                    normal: 'widget://image/img_yyt/message_.png',
+                    highlight: 'widget://image/img_yyt/message_b.png',
+                    selected: 'widget://image/img_yyt/message_b.png'
+                },
+                title: {text: '消息',size: 11.0,normal: '#9c9c9c',selected: '#1387ea',marginB: 9.0}
+            }, {
+
+//                w: api.winWidth / 4.0,
+//                bg: {marginB: -5,image: 'rgba(0,0,0,0)'},
+//                iconRect: {w: 26.0,h: 26.0,},
+//                icon: {
+//                    normal: 'widget://image/img_yyt/work_.png',
+//                    highlight: 'widget://image/img_yyt/work_b.png',
+//                    selected: 'widget://image/img_yyt/work_b.png'
+//                },
+//                title: {text: '工作',size: 11.0,normal: '#9c9c9c',selected: '#1387ea',marginB: 9.0}
+
+
+                w: api.winWidth / 4.0,
+                bg: {marginB: -5,image: 'rgba(0,0,0,0)'},
+                iconRect: {w: 26.0,h: 26.0,},
+                icon: {
+                    normal: 'widget://image/img_yyt/data_.png',
+                    highlight: 'widget://image/img_yyt/data_b.png',
+                    selected: 'widget://image/img_yyt/data_b.png'
+                },
+                title: {text: '资料',size: 11.0,normal: '#9c9c9c',selected: '#1387ea',marginB: 9.0}
+            },{
+
+                w: api.winWidth / 4.0,
+                bg: {marginB: -5,image: 'rgba(0,0,0,0)'},
+                iconRect: {w: 26.0,h: 26.0,},
+                icon: {
+                    normal: 'widget://image/img_yyt/me_.png',
+                    highlight: 'widget://image/img_yyt/me_b.png',
+                    selected: 'widget://image/img_yyt/me_b.png'
+                },
+                title: {text: '我的',size: 11.0,normal: '#9c9c9c',selected: '#1387ea',marginB: 9.0}
+            },],
+            selectedIndex: 0
+        }, function(ret, err) {
+            if (ret){
+                select_idx=ret.index;
+                if(ret.eventType=='show' || ret.index==0){
+                    api.openFrame({
+                        name: 'work_in',
+                        url: 'widget://html/work/work_in.html',
+                        bounces: false,
+//                        reload:true,
+                        rect: {x: 0,y: 0,w: 'auto',h: h1}
+                    });
+                }else{
+                    api.setFrameAttr({
+                        name: 'work_in',
+                        hidden:true
+                    });
+                }
+                if(ret.index==2){
+                    api.openFrame({
+                        name: 'reference_index_zn',
+                        url: 'widget://html/reference/reference_index_zn.html',
+//                        reload:true,
+                        pageParam: {h1:h1},
+                        rect: {x: 0,y: 0,w: 'auto',h:h1}
+                    });
+                }else{
+                    api.setFrameAttr({
+                        name: 'data_qty',
+                        hidden:true
+                    });
+                }
+                if(ret.index==1){
+                    api.openFrame({
+                        name: 'info_qty',
+                        url: 'widget://html/message/info_qty.html',
+//                        reload:true,
+                        pageParam: {h1:h1},
+                        rect: {x: 0,y: 0,w: 'auto',h:h1}
+                    });
+                }else{
+                    api.setFrameAttr({
+                        name: 'info_qty',
+                        hidden:true
+                    });
+                }
+                if(ret.index==3){
+                    api.openFrame({
+                        name: 'me_',
+                        url: 'widget://html/me/me_.html',
+                        pageParam: {h1:h1},
+                        rect: {x: 0,y: 0,w: 'auto',h: 'auto'}
+                    });
+                }else{
+                    api.setFrameAttr({
+                        name: 'me_',
+                        hidden:true
+                    });
+                }
+                NVTabBar.bringToFront();
+            }
+        });
+    };
+    // 将已经打开的模块置为最上层显示
+    function tap_up(){
+        NVTabBar.bringToFront();
+    }
+    //    设置按钮选中状态
+    function select_nav(idx){
+        NVTabBar.setSelect({
+            index: idx
+        });
+    }
+    // 设置按钮右上角的徽章,badge:若不传则表示清除已显示的徽章，若传空字符串则显示小红点（大小为徽章的1.0/2.0）
+    function set_badge(idx){
+        NVTabBar.setBadge({
+            index: idx,
+            badge: ''
+        });
+    }
+    function back_shouye(n){
+        if(n==0){
+            api.setFrameAttr({
+                name: 'index',
+                hidden:false
+            });
+            api.setFrameAttr({
+                name: 'document_',
+                hidden:true
+            });
+            api.setFrameAttr({
+                name: 'login',
+                hidden:true
+            });
+            api.setFrameAttr({
+                name: 'me',
+                hidden:true
+            });
+            api.setFrameAttr({
+                name: 'message',
+                hidden:true
+            });
+            api.setFrameGroupAttr({
+                name: 'gongzuo_group',
+                hidden: true
+            });
+            api.setFrameGroupAttr({
+                name: 'shujufenxi_group',
+                hidden: true
+            });
+        }else if(n==1){
+            api.setFrameAttr({
+                name: 'msg',
+                hidden:false
+            });
+            api.setFrameAttr({
+                name: 'index',
+                hidden:true
+            });
+            api.setFrameAttr({
+                name: 'shuju',
+                hidden:true
+            });
+            api.setFrameAttr({
+                name: 'tongxunlu',
+                hidden:true
+            });
+            api.setFrameAttr({
+                name: 'gongzuo',
+                hidden:true
+            });
+            api.setFrameGroupAttr({
+                name: 'gongzuo_group',
+                hidden: true
+            });
+            api.setFrameGroupAttr({
+                name: 'shujufenxi_group',
+                hidden: true
+            });
+            api.setFrameGroupAttr({
+                name: 'xiaoxi_group',
+                hidden: false
+            });
+        }
+    }
+</script>
+</html>
